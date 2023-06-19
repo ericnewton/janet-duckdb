@@ -53,3 +53,6 @@ dkms.conf
 
 # emacs dribbles
 *~
+
+# jpm build directory
+build

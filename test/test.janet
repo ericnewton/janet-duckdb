@@ -1,5 +1,11 @@
 (import duckdb)
-(import spork/test)
+
+# copied from spork/test
+(defmacro assert-error
+  "Test passes if forms error."
+  [msg & forms]
+  (def errsym (gensym))
+  ~(as-macro ,assert (,= ',errsym (as-macro ,try (do ,;forms) ([_] ',errsym))) ,msg))
 
 # trivial module call
 (assert (string/has-prefix? "v" (duckdb/library_version)) "unexpected version")
@@ -31,14 +37,14 @@
 (var conn (:connect db))
 (:eval conn "create table test(i8 tinyint, i16 smallint, i32 integer, i64 bigint, s varchar, b blob);")
 
-(test/assert-error "expected bad bind type"
-		   (:eval conn "select 1 where ?" :a))
-(test/assert-error "bad type: can't (yet) bind to a composite"
-		   (:eval conn "select 1 where ?" [1 2 3]))
-(test/assert-error "too few params"
-		   (:eval conn "select i8 from test where i32 = ?"))
-(test/assert-error "too many params"
-		   (:eval conn "select i8 from test where i32 = ?" 1 2))
+(assert-error "expected bad bind type"
+	      (:eval conn "select 1 where ?" :a))
+(assert-error "bad type: can't (yet) bind to a composite"
+	      (:eval conn "select 1 where ?" [1 2 3]))
+(assert-error "too few params"
+	      (:eval conn "select i8 from test where i32 = ?"))
+(assert-error "too many params"
+	      (:eval conn "select i8 from test where i32 = ?" 1 2))
 
 # binding for types going in
 (:eval conn "insert into test(i8, i16, i32, i64, s, b) values (?, ?, ?, ?, ?, ?)" 1 2 3 4 "s" @"b")

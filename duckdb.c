@@ -1,5 +1,17 @@
+/*
+ * Copyright (c) 2023 Eric Newton
+ *
+ * see LICENSE
+ *
+ */
+
 #include <duckdb.h>
 #include <janet.h>
+
+/*
+ * I learned much from reading the sqlite bindings, but I'm sure this
+ * could be improved since it is my zero'th janet module.
+ */
 
 typedef struct {
     duckdb_database handle;
@@ -48,7 +60,7 @@ static Janet database_open(int32_t argc, Janet *argv) {
     Database * duckDb = (Database*)janet_abstract(&database_type, sizeof(Database));
     char * err;
     if (duckdb_open_ext(path, &duckDb->handle, NULL, &err) == DuckDBError) {
-	janet_panicf("unable to open database %s: %s", path ? path : "<empty>", err);
+	janet_panicf("unable to open database %s: %s", path ? path : "<memory>", err);
     }
     return janet_wrap_abstract(duckDb);
 }
@@ -95,6 +107,7 @@ static void bind1(duckdb_prepared_statement stmt, int32_t index, Janet arg) {
     duckdb_state res;
     switch (janet_type(arg)) {
     default:
+	duckdb_destroy_prepare(&stmt);
 	janet_panicf("error binding %v at index %d: invalid type (%t) for bind, needs %T",
 		     arg,
 		     index,
@@ -128,6 +141,7 @@ static void bind1(duckdb_prepared_statement stmt, int32_t index, Janet arg) {
     }
     if (res == DuckDBError) {
 	if (duckdb_param_type(stmt, index) == DUCKDB_TYPE_INVALID) {
+	    duckdb_destroy_prepare(&stmt);
 	    janet_panicf("error binding %v (type %t) at index %d: "
 			 "bind has no known type, statement is probably invalid",
 			 arg, arg, index);
@@ -145,6 +159,7 @@ static void bind1(duckdb_prepared_statement stmt, int32_t index, Janet arg) {
 static int bind(duckdb_prepared_statement stmt, int32_t argc, Janet *argv, int offset) {
     int n = duckdb_nparams(stmt);
     if (offset + n > argc) {
+	duckdb_destroy_prepare(&stmt);
 	janet_panicf("too few bind parameters: given %d, need %d", argc - offset, n);
 	return offset;
     }
@@ -201,6 +216,7 @@ static Janet connection_eval(int32_t argc, Janet *argv) {
     bind_offset = execute_extracted_statement(c->handle, statements, statement_count, last, argc, argv, bind_offset, &result);
     
     if (bind_offset != argc) {
+	duckdb_destroy_extracted(&statements);
 	janet_panicf("not all arguments were bound to statements: bound %d of %d",
 		    bind_offset - 2,
 		    argc - 2);
@@ -226,6 +242,7 @@ static Janet connection_eval(int32_t argc, Janet *argv) {
 		switch (type) {
 		default:
 		    {
+			duckdb_destroy_extracted(&statements);
 			janet_panicf("unknown conversion for data type (col %d, row %d)",
 				     col, row);
 			return janet_wrap_nil();
